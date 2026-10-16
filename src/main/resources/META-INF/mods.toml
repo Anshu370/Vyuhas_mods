@@ -1,0 +1,10 @@
+modLoader="javafml"
+loaderVersion="[47,)"
+license="MIT"
+
+[[mods]]
+modId="vyuha_warfare"
+version="0.1.0"
+displayName="Mahabharata Vyūha Warfare"
+authors="Vyūha Warfare contributors"
+description='''Early prototype for tactical formations inspired by ancient Indian military vyūhas.'''
