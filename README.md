@@ -1,31 +1,24 @@
-# Mahabharata Vyūha Warfare — Prototype 0.1
+# Mahabharata Vyūha Warfare — Prototype 0.2
 
 Target: Minecraft Java Edition 1.20.1, Minecraft Forge 47.x, Java 17.
 
-## What this prototype does
-- Registers a minimal Forge mod named `vyuha_warfare`.
-- Logs a startup message so you can verify that the mod loads.
-- Establishes the project structure for future formation systems.
+## Feature
+Adds `/vyuha preview line <count>` where count is 2–20. It displays particle markers for a horizontal line of formation slots around the player. This is a geometry test, not yet a recruit-control system.
 
-## What it does NOT do yet
-- It does not integrate with Villager Recruits.
-- It does not create troop groups or implement playable formations yet.
-- No prebuilt JAR is included in this source archive. Build locally after Gradle downloads the Forge dependencies.
+## Build
+The GitHub Actions workflow in `.github/workflows/build.yml` uses JDK 17 and Gradle 8.8:
+1. Upload these project files to your GitHub repository, including the hidden `.github` folder.
+2. Open Actions and run **Build Forge 1.20.1 mod**.
+3. Download the `vyuha-warfare-jar` artifact from the successful run.
+4. Extract the artifact and copy the JAR into the Forge 1.20.1 `mods` folder, replacing the old version.
 
-## Build on Windows
-1. Install a JDK 17 (not just a JRE).
-2. Install Git if you want version control.
-3. Install Gradle 8.x, or generate/add a Gradle wrapper using a Gradle installation.
-4. Open Command Prompt in this project folder.
-5. Run:
-   `gradle build`
-6. The mod JAR should appear in:
-   `build\libs\vyuha-warfare-0.1.0.jar`
+## In-game test
+1. Create or enter a Creative world.
+2. Run `/vyuha preview line 5`.
+3. Look for green particle markers arranged in a line around you.
+4. Try counts 10 and 20.
 
-If Gradle reports a ForgeGradle or Java toolchain issue, share the full error text.
+If the command is unknown, ensure the new JAR is installed and inspect `latest.log`.
 
-## Install for testing
-After a successful build, copy the JAR from `build\libs` into the `mods` folder used by your Forge 1.20.1 game profile. Launch the game and check the log for the startup message.
-
-## Next milestone
-Inspect the original Villager Recruits source and its license, then design mixed-unit formation membership and a first line-formation test.
+## Next
+Use these formation slots to develop mixed-unit membership and then integrate with Villager Recruits after source/license review.
