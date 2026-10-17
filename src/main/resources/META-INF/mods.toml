@@ -4,7 +4,7 @@ license="MIT"
 
 [[mods]]
 modId="vyuha_warfare"
-version="0.2.0"
+version="0.2.1"
 displayName="Mahabharata Vyūha Warfare"
 authors="Vyūha Warfare contributors"
 description='''Early prototype for tactical formations inspired by ancient Indian military vyūhas.'''

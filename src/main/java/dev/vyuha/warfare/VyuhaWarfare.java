@@ -9,7 +9,7 @@ import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraft.commands.Commands;
-import net.minecraft.commands.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import org.slf4j.Logger;
 
 @Mod(VyuhaWarfare.MOD_ID)
