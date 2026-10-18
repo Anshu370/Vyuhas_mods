@@ -49,7 +49,7 @@ public class VyuhaWarfare {
     private static final Map<UUID, FormationState> ACTIVE_FORMATIONS = new HashMap<>();
 
     public VyuhaWarfare() {
-        LOGGER.info("Mahabharata Vyūha Warfare 1.1.1 spaced Nomad-ring Vajra blueprint loaded.");
+        LOGGER.info("Mahabharata Vyūha Warfare 1.1.2 separated Nomad-ring Vajra blueprint loaded.");
     }
 
     private record Slot(UUID recruitId, double x, double y, double z) {}
@@ -227,7 +227,7 @@ public class VyuhaWarfare {
             source.sendSuccess(() -> Component.literal("Recruits-native " + formationName + ": assigned " + count
                 + " of " + recruits.size() + " commandable recruits."
                 + (formation.equals("vajra") ? " Footprint: 64×64 blocks; template capacity: " + VAJRA_TOTAL_SLOTS
-                    + " (Nomad 24 in two inner rings, Horseman 44 including four corner guards, Shieldman 80, Recruit 64, Bowman 40, Crossbowman 32). Mode: "
+                    + " (Nomad 24 in rings at radii 12 and 4, Horseman 44 including four corner guards, Shieldman 80, Recruit 64, Bowman 40, Crossbowman 32). Mode: "
                     + (fullVajra ? "FULL" : "PARTIAL") + ". Unfilled category slots remain empty; " + reserves
                     + " surplus recruits placed in the rear square reserve." : "")
                 + (ignored > 0 ? " Ignored " + ignored + " unowned/non-listening Recruits." : "")
@@ -291,8 +291,8 @@ public class VyuhaWarfare {
             addSelectedDiamondRing(result.get(VajraRole.CROSSBOWMAN), anchor, forward, right, 8,
                 VAJRA_CROSSBOWMAN_SLOTS, false);
             // Split the 24 Nomads over two distinct inner rings (12 each) to reduce center crowding.
-            addNomadDiamondRing(result.get(VajraRole.NOMAD), anchor, forward, right, 6);
-            addNomadDiamondRing(result.get(VajraRole.NOMAD), anchor, forward, right, 3);
+            addNomadDiamondRing(result.get(VajraRole.NOMAD), anchor, forward, right, 12);
+            addNomadDiamondRing(result.get(VajraRole.NOMAD), anchor, forward, right, 4);
 
             return result;
         }

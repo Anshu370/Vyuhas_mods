@@ -1,4 +1,4 @@
-# Mahabharata Vyūha Warfare — Prototype 1.1.1
+# Mahabharata Vyūha Warfare — Prototype 1.1.2
 
 Forge 1.20.1 source project for the Vajravyūha formation.
 
@@ -28,6 +28,9 @@ These are gameplay design targets, not claims about historically exact troop cou
 Use GitHub Actions workflow `Build Forge 1.20.1 mod`. This source ZIP has not been compiled or tested in-game in this environment. Verify the build and test with Forge 1.20.1 and Villager Recruits 1.14.0.
 
 
-Version 1.1.1 changes: each Nomad ring is explicitly generated as 4 corner positions plus 2 evenly spaced positions on each of its 4 sides. The two 12-slot rings use radii 6 and 3. Horseman remains 44 total, including four corner guards. Correct total capacity is 284 units.
+Version 1.1.2 changes: each Nomad ring is explicitly generated as 4 corner positions plus 2 evenly spaced positions on each of its 4 sides. The two 12-slot rings use radii 12 and 4. Horseman remains 44 total, including four corner guards. Correct total capacity is 284 units.
 
 The source has not been compiled or tested in-game in this environment.
+
+
+Version metadata fix: both `build.gradle` and `mods.toml` now report 1.1.2 so the Mods screen matches the built JAR version. Nomad rings use radii 12 and 4, separating the outer Nomad ring from the center while placing it just outside the Bowman ring.

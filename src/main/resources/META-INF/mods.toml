@@ -4,7 +4,7 @@ license="MIT"
 
 [[mods]]
 modId="vyuha_warfare"
-version="0.8.0"
+version="1.1.2"
 displayName="Mahabharata Vyūha Warfare"
 authors="Vyūha Warfare contributors"
 description='''Category-aware ancient Indian battle formation addon for Recruits, with fixed-footprint Vajravyūha deployment. Does not bundle Recruits code.'''
