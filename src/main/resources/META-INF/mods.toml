@@ -4,10 +4,10 @@ license="MIT"
 
 [[mods]]
 modId="vyuha_warfare"
-version="0.5.0"
+version="0.8.0"
 displayName="Mahabharata Vyūha Warfare"
 authors="Vyūha Warfare contributors"
-description='''Experimental formation controller addon for Recruits; maintains assigned battle-line slots without bundling Recruits code.'''
+description='''Category-aware ancient Indian battle formation addon for Recruits, with fixed-footprint Vajravyūha deployment. Does not bundle Recruits code.'''
 
 [[dependencies.vyuha_warfare]]
 modId="recruits"
