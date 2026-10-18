@@ -35,21 +35,21 @@ import java.util.UUID;
 @Mod(VyuhaWarfare.MOD_ID)
 public class VyuhaWarfare {
     public static final String MOD_ID = "vyuha_warfare";
-    private static final int VAJRA_NOMAD_SLOTS = 8;
-    private static final int VAJRA_HORSEMAN_SLOTS = 20;
-    private static final int VAJRA_SHIELDMAN_SLOTS = 20;
-    private static final int VAJRA_RECRUIT_SLOTS = 20;
-    private static final int VAJRA_BOWMAN_SLOTS = 12;
-    private static final int VAJRA_CROSSBOWMAN_SLOTS = 12;
+    private static final int VAJRA_NOMAD_SLOTS = 24;
+    private static final int VAJRA_HORSEMAN_SLOTS = 40;
+    private static final int VAJRA_SHIELDMAN_SLOTS = 80;
+    private static final int VAJRA_RECRUIT_SLOTS = 64;
+    private static final int VAJRA_BOWMAN_SLOTS = 40;
+    private static final int VAJRA_CROSSBOWMAN_SLOTS = 32;
     private static final int VAJRA_TOTAL_SLOTS = VAJRA_NOMAD_SLOTS + VAJRA_HORSEMAN_SLOTS
         + VAJRA_SHIELDMAN_SLOTS + VAJRA_RECRUIT_SLOTS + VAJRA_BOWMAN_SLOTS + VAJRA_CROSSBOWMAN_SLOTS;
-    private static final double VAJRA_SLOT_SPACING = 3.0;
+    private static final double VAJRA_SLOT_SPACING = 1.5;
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final double SLOT_SPACING = 1.75;
     private static final Map<UUID, FormationState> ACTIVE_FORMATIONS = new HashMap<>();
 
     public VyuhaWarfare() {
-        LOGGER.info("Mahabharata Vyūha Warfare 0.8.1 symmetric Vajravyuha geometry loaded.");
+        LOGGER.info("Mahabharata Vyūha Warfare 0.9.0 Vajra blueprint loaded.");
     }
 
     private record Slot(UUID recruitId, double x, double y, double z) {}
@@ -172,7 +172,7 @@ public class VyuhaWarfare {
                 if (fullVajra) {
                     String missing = describeMissingRoster(groups);
                     if (!missing.isEmpty()) {
-                        source.sendFailure(Component.literal("Vajravyūha full deployment needs the complete 92-slot roster. Missing: " + missing
+                        source.sendFailure(Component.literal("Vajravyūha full deployment needs the complete 280-slot roster. Missing: " + missing
                             + ". Use /vyuha form vajra partial " + radius + " for a partial deployment."));
                         return 0;
                     }
@@ -227,7 +227,7 @@ public class VyuhaWarfare {
             source.sendSuccess(() -> Component.literal("Recruits-native " + formationName + ": assigned " + count
                 + " of " + recruits.size() + " commandable recruits."
                 + (formation.equals("vajra") ? " Footprint: 64×64 blocks; template capacity: " + VAJRA_TOTAL_SLOTS
-                    + " (Nomad 8, Horseman 20, Shieldman 20, Recruit 20, Bowman 12, Crossbowman 12). Mode: "
+                    + " (Nomad 24, Horseman 40, Shieldman 80, Recruit 64, Bowman 40, Crossbowman 32). Mode: "
                     + (fullVajra ? "FULL" : "PARTIAL") + ". Unfilled category slots remain empty; " + reserves
                     + " surplus recruits placed in the rear square reserve." : "")
                 + (ignored > 0 ? " Ignored " + ignored + " unowned/non-listening Recruits." : "")
@@ -278,28 +278,21 @@ public class VyuhaWarfare {
             Map<VajraRole, List<Slot>> result = new java.util.EnumMap<>(VajraRole.class);
             for (VajraRole role : VajraRole.values()) result.put(role, new ArrayList<>());
 
-            // Build each infantry layer as a complete diamond perimeter, then choose
-            // evenly spaced mirrored stations. Never truncate a perimeter list: that
-            // was causing the old layout to become asymmetric and look like a cross.
-            // At 3 blocks per grid step, radius 10 fits inside the 64x64 footprint.
-            for (int row : new int[]{-10, -8, -6, -4, 4, 6, 8, 10}) {
-                addGridPoint(result.get(VajraRole.NOMAD), anchor, forward, right, row, 0);
-            }
-
-            // Horsemen occupy the two sloping wings. Exclude the forward/rear axis tips,
-            // which are reserved for heavy-unit stations, then select mirrored stations.
-            addSelectedDiamondRing(result.get(VajraRole.HORSEMAN), anchor, forward, right, 10,
-                VAJRA_HORSEMAN_SLOTS, true);
-            // Infantry layers outside-to-inside. Every selected ring is symmetric and
-            // has distinct coordinates, so no category can steal another category's slot.
-            addSelectedDiamondRing(result.get(VajraRole.SHIELDMAN), anchor, forward, right, 9,
+            // Fixed Vajra 2.0 blueprint: one dedicated diamond perimeter per role.
+            // The entire template fits inside the 64x64 footprint (outer radius 22 * 1.5 = 33 blocks).
+            // Outer-to-inner infantry rings remain separate; cavalry occupy a wider pair of wings.
+            addSelectedDiamondRing(result.get(VajraRole.SHIELDMAN), anchor, forward, right, 20,
                 VAJRA_SHIELDMAN_SLOTS, false);
-            addSelectedDiamondRing(result.get(VajraRole.RECRUIT), anchor, forward, right, 7,
+            addSelectedDiamondRing(result.get(VajraRole.HORSEMAN), anchor, forward, right, 22,
+                VAJRA_HORSEMAN_SLOTS, true);
+            addSelectedDiamondRing(result.get(VajraRole.RECRUIT), anchor, forward, right, 16,
                 VAJRA_RECRUIT_SLOTS, false);
-            addSelectedDiamondRing(result.get(VajraRole.BOWMAN), anchor, forward, right, 5,
+            addSelectedDiamondRing(result.get(VajraRole.BOWMAN), anchor, forward, right, 10,
                 VAJRA_BOWMAN_SLOTS, false);
-            addSelectedDiamondRing(result.get(VajraRole.CROSSBOWMAN), anchor, forward, right, 3,
+            addSelectedDiamondRing(result.get(VajraRole.CROSSBOWMAN), anchor, forward, right, 8,
                 VAJRA_CROSSBOWMAN_SLOTS, false);
+            addSelectedDiamondRing(result.get(VajraRole.NOMAD), anchor, forward, right, 6,
+                VAJRA_NOMAD_SLOTS, false);
 
             return result;
         }
@@ -345,7 +338,7 @@ public class VyuhaWarfare {
         private static List<Slot> makeReserveSlots(int count, Vec3 anchor, Vec3 forward, Vec3 right, int offset) {
             List<Slot> slots = new ArrayList<>();
             int width = 8;
-            Vec3 reserveAnchor = anchor.add(forward.scale(-34.0));
+            Vec3 reserveAnchor = anchor.add(forward.scale(-38.0));
             for (int i = 0; i < count; i++) {
                 int reserveIndex = offset + i;
                 int row = reserveIndex / width;
