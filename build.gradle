@@ -6,7 +6,7 @@ plugins {
 }
 
 group = 'dev.vyuha'
-version = '0.4.0'
+version = '0.5.0'
 archivesBaseName = 'vyuha-warfare'
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
@@ -36,7 +36,7 @@ minecraft {
 repositories {}
 
 dependencies {
-    minecraft 'net.minecraftforge:forge:1.20.1-47.3.0'
+    minecraft 'net.minecraftforge:forge:1.20.1-47.4.13'
 }
 
 tasks.named('jar', Jar).configure {

@@ -4,7 +4,14 @@ license="MIT"
 
 [[mods]]
 modId="vyuha_warfare"
-version="0.4.0"
+version="0.5.0"
 displayName="Mahabharata Vyūha Warfare"
 authors="Vyūha Warfare contributors"
 description='''Experimental formation controller addon for Recruits; maintains assigned battle-line slots without bundling Recruits code.'''
+
+[[dependencies.vyuha_warfare]]
+modId="recruits"
+mandatory=true
+versionRange="[1.14.0,)"
+ordering="AFTER"
+side="BOTH"

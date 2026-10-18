@@ -1,28 +1,26 @@
-# Mahabharata Vyūha Warfare — Prototype 0.4.0
+# Mahabharata Vyūha Warfare — Prototype 0.5.0
 
-Target: Minecraft Java Edition 1.20.1, Forge 47.x, Java 17. This is a standalone compatibility addon; it does not bundle or copy Villager Recruits source.
+Target: Minecraft Java 1.20.1, Forge 47.4.x, Java 17. Compatibility target: Villager Recruits 1.14.0.
+
+This is a separate addon. It does not bundle, copy, or redistribute Recruits source. It uses reflection against Recruits' public runtime methods and optional fields so it can integrate with Recruits' native state/hold-position goal rather than running a competing vanilla-navigation controller. The upstream repository says “All Rights Reserved unless otherwise explicitly stated”; see https://github.com/talhanation/recruits.
 
 ## Commands
-- `/vyuha preview line <count>` — visual preview (2–20 slots).
-- `/vyuha form line <radius>` — find nearby live entities registered in the `recruits` namespace (radius 4–32), assign unique line slots, and start a lightweight controller.
-- `/vyuha release` — stop the controller for the command-issuing player; soldiers return to normal Recruits AI.
+- `/vyuha preview line <count>` — visual preview (2–40 slots).
+- `/vyuha form line <radius>` — find nearby Recruits entities (radius 4–32), require that the executing player can command them, assign unique terrain-checked line slots, then request Recruits-native behaviour by setting hold position and its “back to position” state.
+- `/vyuha release` — ends the addon’s tracked formation and switches these soldiers to Recruits’ native “Hold your Position” state at their current locations.
 
-## Prototype behaviour
-- Each recruit is assigned a separate slot along a line in front of the player.
-- Slots use the heightmap and basic collision checks to avoid placing targets inside blocks.
-- The controller periodically checks the recruits and reissues navigation orders when a recruit is not near its slot and its current navigation path has ended. It does not overwrite active paths every tick.
-- This remains experimental: it cannot guarantee exact formation holding if Recruits AI, combat, terrain, or pathfinding overrides movement. Selection is namespace-based and currently does not filter by owner/team.
+## Why this design differs from 0.4.x
+The earlier prototype called `Mob.getNavigation().moveTo(...)` directly and tracked movement itself. Public Recruits source shows its formation flow sets each recruit's hold-position target, switches its follow state to 3 (“back to position”), and marks formation flags; Recruits' own hold-position goal then manages path retries. 0.5.0 uses reflection to request this existing behaviour rather than fighting it with an independent controller. The code does not import Recruits classes or include Recruits source.
 
-## Build with GitHub Actions
-1. Extract this ZIP and replace the project files in your existing GitHub repository, including `.github/workflows/build.yml`.
-2. Open Actions and run **Build Forge 1.20.1 mod**.
-3. Download `vyuha-warfare-jar` after a successful run.
-4. Close Minecraft and remove the previous `vyuha-warfare-*.jar` before installing the new JAR in your Forge 1.20.1 `mods` folder.
+## Build and test
+1. Extract this ZIP and replace project files in the existing GitHub repository (include `.github/workflows/build.yml`).
+2. Run GitHub Actions workflow `Build Forge 1.20.1 mod`.
+3. Download artifact `vyuha-warfare-jar`; remove the previous Vyūha Warfare JAR before installing the new one. Keep `recruits-1.14.0.jar` installed.
+4. Use a backed-up or Creative test world. Hire/own recruits with command listening enabled; stand on a broad, flat area with enough room.
+5. Run `/vyuha form line 16`, wait 10–15 seconds, and see whether soldiers settle into slots.
+6. Run `/vyuha release` to order them to hold their current positions using Recruits' own behaviour.
 
-## Test
-1. Back up your world or use a Creative test world.
-2. Gather several Recruits on relatively flat terrain.
-3. Run `/vyuha form line 16`. Wait several seconds and watch whether they settle into assigned slots.
-4. Run `/vyuha release` to stop the controller.
-
-The upstream Recruits repository identifies its source as All Rights Reserved. This addon uses registry-level entity detection and does not include its code. The source has not been compiled or tested in-game in this environment; build with Actions and report any build error before testing.
+## Important limitations
+- The public repository default branch is newer than the installed Recruits 1.14.0. The reflection-based method names were confirmed in the public code inspected, but not independently verified against every 1.14.0 binary symbol. If the method names differ, the chat command may report fewer assigned troops and the log will say which method was unavailable.
+- A successful compile does not prove runtime compatibility. Build using Actions, test in game, and share chat output or `latest.log` if it fails.
+- Slots use a simple line and terrain height/collision checks, not yet obstacle-aware route planning. Combat AI can temporarily pull recruits out of formation.
