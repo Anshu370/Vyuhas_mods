@@ -49,7 +49,7 @@ public class VyuhaWarfare {
     private static final Map<UUID, FormationState> ACTIVE_FORMATIONS = new HashMap<>();
 
     public VyuhaWarfare() {
-        LOGGER.info("Mahabharata Vyūha Warfare 0.8.0 fixed-footprint Vajravyuha integration loaded.");
+        LOGGER.info("Mahabharata Vyūha Warfare 0.8.1 symmetric Vajravyuha geometry loaded.");
     }
 
     private record Slot(UUID recruitId, double x, double y, double z) {}
@@ -278,46 +278,56 @@ public class VyuhaWarfare {
             Map<VajraRole, List<Slot>> result = new java.util.EnumMap<>(VajraRole.class);
             for (VajraRole role : VajraRole.values()) result.put(role, new ArrayList<>());
 
-            // The main Vajra footprint is 64x64 blocks. A 10-step diamond with 3-block
-            // spacing spans 60x60 blocks, leaving a small safety margin inside the footprint.
-            // Nomad/heavy-unit positions are kept on the forward/rear axis.
+            // Build each infantry layer as a complete diamond perimeter, then choose
+            // evenly spaced mirrored stations. Never truncate a perimeter list: that
+            // was causing the old layout to become asymmetric and look like a cross.
+            // At 3 blocks per grid step, radius 10 fits inside the 64x64 footprint.
             for (int row : new int[]{-10, -8, -6, -4, 4, 6, 8, 10}) {
                 addGridPoint(result.get(VajraRole.NOMAD), anchor, forward, right, row, 0);
             }
 
-            // Horsemen occupy 20 symmetric stations on the outer diamond edges; axis tips
-            // remain reserved for Nomads, so the two categories never share a slot.
-            addRingSubset(result.get(VajraRole.HORSEMAN), anchor, forward, right, 10, false, 1, 2, 5, 8, 9);
-            // Infantry/ranged rings, outside to inside. Each ring has exactly its template capacity.
-            addRingSubset(result.get(VajraRole.SHIELDMAN), anchor, forward, right, 9, true, 1, 2, 7, 8);
-            addRingSubset(result.get(VajraRole.RECRUIT), anchor, forward, right, 7, true, 1, 2, 5, 6);
-            addRingSubset(result.get(VajraRole.BOWMAN), anchor, forward, right, 5, true, 1, 4);
-            addRingSubset(result.get(VajraRole.CROSSBOWMAN), anchor, forward, right, 3, true, 1, 2);
+            // Horsemen occupy the two sloping wings. Exclude the forward/rear axis tips,
+            // which are reserved for heavy-unit stations, then select mirrored stations.
+            addSelectedDiamondRing(result.get(VajraRole.HORSEMAN), anchor, forward, right, 10,
+                VAJRA_HORSEMAN_SLOTS, true);
+            // Infantry layers outside-to-inside. Every selected ring is symmetric and
+            // has distinct coordinates, so no category can steal another category's slot.
+            addSelectedDiamondRing(result.get(VajraRole.SHIELDMAN), anchor, forward, right, 9,
+                VAJRA_SHIELDMAN_SLOTS, false);
+            addSelectedDiamondRing(result.get(VajraRole.RECRUIT), anchor, forward, right, 7,
+                VAJRA_RECRUIT_SLOTS, false);
+            addSelectedDiamondRing(result.get(VajraRole.BOWMAN), anchor, forward, right, 5,
+                VAJRA_BOWMAN_SLOTS, false);
+            addSelectedDiamondRing(result.get(VajraRole.CROSSBOWMAN), anchor, forward, right, 3,
+                VAJRA_CROSSBOWMAN_SLOTS, false);
 
-            trim(result.get(VajraRole.NOMAD), VAJRA_NOMAD_SLOTS);
-            trim(result.get(VajraRole.HORSEMAN), VAJRA_HORSEMAN_SLOTS);
-            trim(result.get(VajraRole.SHIELDMAN), VAJRA_SHIELDMAN_SLOTS);
-            trim(result.get(VajraRole.RECRUIT), VAJRA_RECRUIT_SLOTS);
-            trim(result.get(VajraRole.BOWMAN), VAJRA_BOWMAN_SLOTS);
-            trim(result.get(VajraRole.CROSSBOWMAN), VAJRA_CROSSBOWMAN_SLOTS);
             return result;
         }
 
-        private static void addRingSubset(List<Slot> out, Vec3 anchor, Vec3 forward, Vec3 right,
-                                          int radius, boolean includeAxes, int... edgeIndices) {
-            if (includeAxes) {
-                addGridPoint(out, anchor, forward, right, -radius, 0);
-                addGridPoint(out, anchor, forward, right, 0, radius);
-                addGridPoint(out, anchor, forward, right, radius, 0);
-                addGridPoint(out, anchor, forward, right, 0, -radius);
+        private static void addSelectedDiamondRing(List<Slot> out, Vec3 anchor, Vec3 forward, Vec3 right,
+                                                   int radius, int capacity, boolean wingsOnly) {
+            List<int[]> candidates = new ArrayList<>();
+            // Walk all four diamond edges without duplicating the four corner points.
+            for (int col = -radius; col <= radius; col++) {
+                int rowAbs = radius - Math.abs(col);
+                candidates.add(new int[]{-rowAbs, col});
             }
-            for (int i : edgeIndices) {
-                if (i <= 0 || i >= radius) continue;
-                // Four edges between the diamond's cardinal points; chosen indices are mirrored.
-                addGridPoint(out, anchor, forward, right, -radius + i, i);
-                addGridPoint(out, anchor, forward, right, i, radius - i);
-                addGridPoint(out, anchor, forward, right, radius - i, -i);
-                addGridPoint(out, anchor, forward, right, -i, -(radius - i));
+            for (int row = -radius + 1; row < radius; row++) {
+                int colAbs = radius - Math.abs(row);
+                candidates.add(new int[]{row, colAbs});
+                candidates.add(new int[]{row, -colAbs});
+            }
+            if (wingsOnly) {
+                // Keep the left/right wings; omit the sharp front and rear points.
+                candidates.removeIf(point -> Math.abs(point[0]) == radius);
+            }
+            // Stable angular order makes evenly sampled points mirror across both axes.
+            candidates.sort(Comparator.comparingDouble(point -> Math.atan2(point[1], point[0])));
+            int take = Math.min(capacity, candidates.size());
+            for (int i = 0; i < take; i++) {
+                int index = (int) Math.round(i * candidates.size() / (double) take) % candidates.size();
+                int[] point = candidates.get(index);
+                addGridPoint(out, anchor, forward, right, point[0], point[1]);
             }
         }
 
