@@ -1,26 +1,28 @@
-# Mahabharata Vyūha Warfare — Prototype 0.3.0
+# Mahabharata Vyūha Warfare — Prototype 0.4.0
 
-Target: Minecraft Java Edition 1.20.1, Forge 47.x, Java 17.
+Target: Minecraft Java Edition 1.20.1, Forge 47.x, Java 17. This is a standalone compatibility addon; it does not bundle or copy Villager Recruits source.
 
-## Features
-- `/vyuha preview line <count>` displays line-slot particles for 2–20 positions.
-- `/vyuha form line <radius>` searches within 4–32 blocks for living mob entities registered under the `recruits` namespace, then issues navigation targets to arrange them into a mixed line. Different Recruits classes can be handled together because selection is by entity namespace, not class.
-- This is an experimental first integration. It has not yet been compiled or tested in-game; navigation may be refused by some recruit states or blocked terrain.
+## Commands
+- `/vyuha preview line <count>` — visual preview (2–20 slots).
+- `/vyuha form line <radius>` — find nearby live entities registered in the `recruits` namespace (radius 4–32), assign unique line slots, and start a lightweight controller.
+- `/vyuha release` — stop the controller for the command-issuing player; soldiers return to normal Recruits AI.
 
-## Build in GitHub Actions
-1. Replace the project files in your GitHub repository with these files, including `.github/workflows/build.yml`.
+## Prototype behaviour
+- Each recruit is assigned a separate slot along a line in front of the player.
+- Slots use the heightmap and basic collision checks to avoid placing targets inside blocks.
+- The controller periodically checks the recruits and reissues navigation orders when a recruit is not near its slot and its current navigation path has ended. It does not overwrite active paths every tick.
+- This remains experimental: it cannot guarantee exact formation holding if Recruits AI, combat, terrain, or pathfinding overrides movement. Selection is namespace-based and currently does not filter by owner/team.
+
+## Build with GitHub Actions
+1. Extract this ZIP and replace the project files in your existing GitHub repository, including `.github/workflows/build.yml`.
 2. Open Actions and run **Build Forge 1.20.1 mod**.
 3. Download `vyuha-warfare-jar` after a successful run.
-4. Close Minecraft, remove old `vyuha-warfare-*.jar` files, and copy the new JAR into the Forge 1.20.1 `mods` folder.
+4. Close Minecraft and remove the previous `vyuha-warfare-*.jar` before installing the new JAR in your Forge 1.20.1 `mods` folder.
 
-## In-game test
-1. Use a backup or test Creative world.
-2. Spawn/hire several Recruits of different classes nearby.
-3. Run `/vyuha form line 16`.
-4. The command issues navigation targets to nearby Recruits registered under the `recruits` namespace and emits green markers at their target slots.
-5. `/vyuha preview line 5` remains available.
+## Test
+1. Back up your world or use a Creative test world.
+2. Gather several Recruits on relatively flat terrain.
+3. Run `/vyuha form line 16`. Wait several seconds and watch whether they settle into assigned slots.
+4. Run `/vyuha release` to stop the controller.
 
-This mod does not include or redistribute Villager Recruits code. The public source repository identifies its license as All Rights Reserved; this project uses registry-level entity detection rather than copying its implementation.
-
-## Next
-Verify the build and in-game behavior, then improve selection, ownership filtering, slot persistence, pathing, and mixed-role formations.
+The upstream Recruits repository identifies its source as All Rights Reserved. This addon uses registry-level entity detection and does not include its code. The source has not been compiled or tested in-game in this environment; build with Actions and report any build error before testing.
