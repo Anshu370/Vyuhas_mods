@@ -49,7 +49,7 @@ public class VyuhaWarfare {
     private static final Map<UUID, FormationState> ACTIVE_FORMATIONS = new HashMap<>();
 
     public VyuhaWarfare() {
-        LOGGER.info("Mahabharata Vyūha Warfare 1.1.0 corner-guarded Vajra blueprint loaded.");
+        LOGGER.info("Mahabharata Vyūha Warfare 1.1.1 spaced Nomad-ring Vajra blueprint loaded.");
     }
 
     private record Slot(UUID recruitId, double x, double y, double z) {}
@@ -291,10 +291,32 @@ public class VyuhaWarfare {
             addSelectedDiamondRing(result.get(VajraRole.CROSSBOWMAN), anchor, forward, right, 8,
                 VAJRA_CROSSBOWMAN_SLOTS, false);
             // Split the 24 Nomads over two distinct inner rings (12 each) to reduce center crowding.
-            addSelectedDiamondRing(result.get(VajraRole.NOMAD), anchor, forward, right, 6, 12, false);
-            addSelectedDiamondRing(result.get(VajraRole.NOMAD), anchor, forward, right, 3, 12, false);
+            addNomadDiamondRing(result.get(VajraRole.NOMAD), anchor, forward, right, 6);
+            addNomadDiamondRing(result.get(VajraRole.NOMAD), anchor, forward, right, 3);
 
             return result;
+        }
+
+        private static void addNomadDiamondRing(List<Slot> out, Vec3 anchor, Vec3 forward, Vec3 right, double radius) {
+            // Exactly 12 unique Nomad positions per ring: four corner guards plus two
+            // evenly spaced positions on each of the four sides. This avoids sampling
+            // a generic perimeter, which can bunch points or omit the corners.
+            double[][] corners = new double[][] {
+                {-radius, 0}, {0, radius}, {radius, 0}, {0, -radius}
+            };
+            for (double[] corner : corners) {
+                addGridPoint(out, anchor, forward, right, corner[0], corner[1]);
+            }
+            for (int edge = 0; edge < 4; edge++) {
+                double[] a = corners[edge];
+                double[] b = corners[(edge + 1) % 4];
+                for (int point = 1; point <= 2; point++) {
+                    double t = point / 3.0;
+                    double row = a[0] + (b[0] - a[0]) * t;
+                    double col = a[1] + (b[1] - a[1]) * t;
+                    addGridPoint(out, anchor, forward, right, row, col);
+                }
+            }
         }
 
         private static void addCornerGuardedCavalry(List<Slot> out, Vec3 anchor, Vec3 forward, Vec3 right, int radius) {
