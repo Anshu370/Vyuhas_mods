@@ -35,12 +35,18 @@ import java.util.UUID;
 @Mod(VyuhaWarfare.MOD_ID)
 public class VyuhaWarfare {
     public static final String MOD_ID = "vyuha_warfare";
+    private static final int VAJRA_NOMAD_SLOTS = 8;
+    private static final int VAJRA_HORSEMAN_SLOTS = 20;
+    private static final int VAJRA_SHIELDMAN_SLOTS = 20;
+    private static final int VAJRA_RECRUIT_SLOTS = 20;
+    private static final int VAJRA_BOWMAN_SLOTS = 12;
+    private static final int VAJRA_CROSSBOWMAN_SLOTS = 12;
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final double SLOT_SPACING = 1.75;
     private static final Map<UUID, FormationState> ACTIVE_FORMATIONS = new HashMap<>();
 
     public VyuhaWarfare() {
-        LOGGER.info("Mahabharata Vyūha Warfare 0.6.0 Vajravyuha formation integration loaded.");
+        LOGGER.info("Mahabharata Vyūha Warfare 0.7.0 category-aware Vajravyuha integration loaded.");
     }
 
     private record Slot(UUID recruitId, double x, double y, double z) {}
@@ -143,52 +149,54 @@ public class VyuhaWarfare {
             Vec3 forward = horizontalForward(player);
             Vec3 right = new Vec3(forward.z, 0, -forward.x);
             Vec3 anchor = player.position().add(forward.scale(5.0));
-            List<Slot> slots = formation.equals("vajra")
-                ? makeVajraSlots(recruits.size(), anchor, forward, right)
-                : makeLineSlots(recruits.size(), anchor, right);
-
-            if (formation.equals("vajra")) {
-                // Arrange role groups for the Vajra's visual layers. Registry IDs vary by Recruits version,
-                // so classification uses conservative name fragments and falls back to ordinary infantry.
-                recruits.sort(Comparator.comparingInt(ForgeEvents::vajraRoleOrder)
-                    .thenComparingDouble(mob -> mob.distanceToSqr(player)));
-            }
-
-            int assigned = 0, unsuitable = 0;
+            int assigned = 0, unsuitable = 0, overflowCount = 0;
             List<UUID> assignedIds = new ArrayList<>();
-            int n = Math.min(recruits.size(), slots.size());
-            for (int i = 0; i < n; i++) {
-                Mob recruit = recruits.get(i);
-                Slot slot = slots.get(i);
-                BlockPos surface = findSurface(level, slot.x(), slot.z());
-                if (surface == null) { unsuitable++; continue; }
-                Vec3 target = new Vec3(surface.getX() + 0.5, surface.getY(), surface.getZ() + 0.5);
-                try {
-                    invokeBoolean(recruit, "setShouldRest", false);
-                    invokeRequired(recruit, "setHoldPos", new Class<?>[]{Vec3.class}, target);
-                    invokeRequired(recruit, "setFollowState", new Class<?>[]{int.class}, 3);
-                    setPublicFieldIfPresent(recruit, "formationPos", assigned);
-                    setPublicFieldIfPresent(recruit, "isInFormation", true);
-                    setPublicFieldIfPresent(recruit, "holdFormation", true);
-                    setPublicFieldIfPresent(recruit, "ownerRot", player.getYRot());
-                    recruit.getNavigation().stop();
-                    assignedIds.add(recruit.getUUID());
-                    level.sendParticles(ParticleTypes.HAPPY_VILLAGER, target.x, target.y + 0.7, target.z,
-                        1, 0.05, 0.05, 0.05, 0.0);
-                    assigned++;
-                } catch (ReflectiveOperationException ex) {
-                    LOGGER.warn("Could not apply Recruits-native {} formation to {}: {}", formation,
-                        recruit.getType().toString(), ex.toString());
+            if (formation.equals("vajra")) {
+                Map<VajraRole, List<Mob>> groups = new java.util.EnumMap<>(VajraRole.class);
+                for (VajraRole role : VajraRole.values()) groups.put(role, new ArrayList<>());
+                for (Mob recruit : recruits) groups.get(classifyVajraRole(recruit)).add(recruit);
+                for (List<Mob> group : groups.values()) {
+                    group.sort(Comparator.comparingDouble(mob -> mob.distanceToSqr(player)));
+                }
+                Map<VajraRole, List<Slot>> roleSlots = makeVajraRoleSlots(anchor, forward, right);
+                int formationIndex = 0;
+                for (VajraRole role : VajraRole.values()) {
+                    List<Mob> group = groups.get(role);
+                    List<Slot> slotsForRole = roleSlots.get(role);
+                    int regular = Math.min(group.size(), slotsForRole.size());
+                    for (int i = 0; i < regular; i++) {
+                        Mob recruit = group.get(i);
+                        Slot slot = slotsForRole.get(i);
+                        if (assignRecruit(level, player, recruit, slot, formationIndex++, assignedIds)) assigned++;
+                        else unsuitable++;
+                    }
+                    if (group.size() > regular) {
+                        List<Slot> reserveSlots = makeReserveSlots(group.size() - regular, anchor, forward, right, overflowCount);
+                        for (int i = regular; i < group.size(); i++) {
+                            Mob recruit = group.get(i);
+                            Slot slot = reserveSlots.get(i - regular);
+                            if (assignRecruit(level, player, recruit, slot, formationIndex++, assignedIds)) {
+                                assigned++;
+                                overflowCount++;
+                            } else unsuitable++;
+                        }
+                    }
+                }
+            } else {
+                List<Slot> slots = makeLineSlots(recruits.size(), anchor, right);
+                for (int i = 0; i < recruits.size(); i++) {
+                    if (assignRecruit(level, player, recruits.get(i), slots.get(i), i, assignedIds)) assigned++;
+                    else unsuitable++;
                 }
             }
             ACTIVE_FORMATIONS.put(player.getUUID(), new FormationState(level.dimension().location().toString(), assignedIds));
-            final int count = assigned, skipped = unsuitable, ignored = ineligible;
-            String formationName = formation.equals("vajra") ? "Vajravyūha diamond" : "battle line";
-            source.sendSuccess(() -> Component.literal("Recruits-native " + formationName + " assigned to " + count + "/" + recruits.size()
-                + " of your Recruits. Their built-in hold-position goal manages movement and settling."
-                + (formation.equals("vajra") ? " Ranged units are ordered toward the inner/rear ranks; mobile units toward outer ranks where their registry names are recognizable." : "")
+            final int count = assigned, skipped = unsuitable, ignored = ineligible, reserves = overflowCount;
+            String formationName = formation.equals("vajra") ? "category-aware Vajravyūha diamond" : "battle line";
+            source.sendSuccess(() -> Component.literal("Recruits-native " + formationName + ": assigned " + count
+                + " of " + recruits.size() + " commandable recruits."
+                + (formation.equals("vajra") ? " Roles: Nomads=heavy-unit points, Horsemen=cavalry wings, Shieldmen=outer infantry, Recruits=next infantry layer, Bowmen/Crossbowmen=inner ranged ranks. Unfilled role slots remain empty; " + reserves + " surplus recruits placed in the rear square reserve." : "")
                 + (ignored > 0 ? " Ignored " + ignored + " unowned/non-listening Recruits." : "")
-                + (skipped > 0 ? " Skipped " + skipped + " slots without safe ground." : "")), false);
+                + (skipped > 0 ? " Skipped " + skipped + " slots without safe ground or usable native controls." : ""), false);
             return assigned;
         }
 
@@ -201,42 +209,114 @@ public class VyuhaWarfare {
             return slots;
         }
 
-        private static List<Slot> makeVajraSlots(int count, Vec3 anchor, Vec3 forward, Vec3 right) {
-            // Diamond lattice: narrow pointed front and rear, widest ranks through the middle.
-            List<Slot> slots = new ArrayList<>();
-            int halfDepth = Math.max(2, (int)Math.ceil(Math.sqrt(count)));
-            List<double[]> points = new ArrayList<>();
-            for (int row = -halfDepth; row <= halfDepth; row++) {
-                int width = halfDepth - Math.abs(row);
-                for (int col = -width; col <= width; col++) {
-                    points.add(new double[]{row, col});
+        private enum VajraRole { NOMAD, HORSEMAN, SHIELDMAN, RECRUIT, BOWMAN, CROSSBOWMAN }
+
+        private static Map<VajraRole, List<Slot>> makeVajraRoleSlots(Vec3 anchor, Vec3 forward, Vec3 right) {
+            Map<VajraRole, List<Slot>> result = new java.util.EnumMap<>(VajraRole.class);
+            for (VajraRole role : VajraRole.values()) result.put(role, new ArrayList<>());
+            // Nomad/heavy-unit stations: paired points at the two tips and just inside them.
+            addPoint(result.get(VajraRole.NOMAD), anchor, forward, right, -8, 0);
+            addPoint(result.get(VajraRole.NOMAD), anchor, forward, right, 8, 0);
+            addPoint(result.get(VajraRole.NOMAD), anchor, forward, right, -6, -1);
+            addPoint(result.get(VajraRole.NOMAD), anchor, forward, right, -6, 1);
+            addPoint(result.get(VajraRole.NOMAD), anchor, forward, right, 6, -1);
+            addPoint(result.get(VajraRole.NOMAD), anchor, forward, right, 6, 1);
+            addPoint(result.get(VajraRole.NOMAD), anchor, forward, right, -4, 0);
+            addPoint(result.get(VajraRole.NOMAD), anchor, forward, right, 4, 0);
+            // Horsemen occupy the long outer wings, keeping the diamond outline readable.
+            for (int row = -6; row <= 6; row++) {
+                if (row == 0) continue;
+                int edge = 8 - Math.abs(row);
+                addPoint(result.get(VajraRole.HORSEMAN), anchor, forward, right, row, -edge);
+                addPoint(result.get(VajraRole.HORSEMAN), anchor, forward, right, row, edge);
+            }
+            // Infantry bands are ordered from outside to inside: shield, sword, bow, crossbow.
+            addBand(result.get(VajraRole.SHIELDMAN), anchor, forward, right, 6, 7);
+            addBand(result.get(VajraRole.RECRUIT), anchor, forward, right, 4, 5);
+            addBand(result.get(VajraRole.BOWMAN), anchor, forward, right, 2, 3);
+            addBand(result.get(VajraRole.CROSSBOWMAN), anchor, forward, right, 0, 1);
+            // Trim to the deliberate template capacity; these empty stations are reserved for their role.
+            trim(result.get(VajraRole.NOMAD), VAJRA_NOMAD_SLOTS);
+            trim(result.get(VajraRole.HORSEMAN), VAJRA_HORSEMAN_SLOTS);
+            trim(result.get(VajraRole.SHIELDMAN), VAJRA_SHIELDMAN_SLOTS);
+            trim(result.get(VajraRole.RECRUIT), VAJRA_RECRUIT_SLOTS);
+            trim(result.get(VajraRole.BOWMAN), VAJRA_BOWMAN_SLOTS);
+            trim(result.get(VajraRole.CROSSBOWMAN), VAJRA_CROSSBOWMAN_SLOTS);
+            return result;
+        }
+
+        private static void addBand(List<Slot> out, Vec3 anchor, Vec3 forward, Vec3 right, int innerRadius, int outerRadius) {
+            for (int row = -outerRadius; row <= outerRadius; row++) {
+                for (int col = -outerRadius; col <= outerRadius; col++) {
+                    int distance = Math.abs(row) + Math.abs(col);
+                    if (distance < innerRadius || distance > outerRadius) continue;
+                    // Avoid the extreme side points reserved for cavalry wings.
+                    if (Math.abs(col) >= outerRadius && Math.abs(row) < outerRadius - 1) continue;
+                    addPoint(out, anchor, forward, right, row, col);
                 }
             }
-            // Front-to-rear rank order; within each rank, alternate left/right to keep the shape balanced.
-            points.sort((a, b) -> {
-                int rowCompare = Double.compare(a[0], b[0]);
-                if (rowCompare != 0) return rowCompare;
-                int absCompare = Double.compare(Math.abs(a[1]), Math.abs(b[1]));
-                if (absCompare != 0) return absCompare;
-                return Double.compare(a[1], b[1]);
-            });
-            for (int i = 0; i < Math.min(count, points.size()); i++) {
-                double row = points.get(i)[0], col = points.get(i)[1];
-                double depth = row * SLOT_SPACING * 1.25;
-                double lateral = col * SLOT_SPACING;
-                double x = anchor.x - forward.x * depth + right.x * lateral;
-                double z = anchor.z - forward.z * depth + right.z * lateral;
-                slots.add(new Slot(new UUID(0L, 0L), x, anchor.y, z));
+        }
+
+        private static void addPoint(List<Slot> out, Vec3 anchor, Vec3 forward, Vec3 right, double row, double col) {
+            double depth = row * SLOT_SPACING * 1.25;
+            double lateral = col * SLOT_SPACING;
+            out.add(new Slot(new UUID(0L, 0L), anchor.x - forward.x * depth + right.x * lateral,
+                anchor.y, anchor.z - forward.z * depth + right.z * lateral));
+        }
+
+        private static void trim(List<Slot> slots, int capacity) {
+            if (slots.size() > capacity) slots.subList(capacity, slots.size()).clear();
+        }
+
+        private static List<Slot> makeReserveSlots(int count, Vec3 anchor, Vec3 forward, Vec3 right, int offset) {
+            List<Slot> slots = new ArrayList<>();
+            int width = 8;
+            Vec3 reserveAnchor = anchor.add(forward.scale(-12.0 * SLOT_SPACING));
+            for (int i = 0; i < count; i++) {
+                int reserveIndex = offset + i;
+                int row = reserveIndex / width;
+                int col = reserveIndex % width;
+                double lateral = (col - (width - 1) / 2.0) * SLOT_SPACING;
+                double depth = row * SLOT_SPACING;
+                slots.add(new Slot(new UUID(0L, 0L), reserveAnchor.x - forward.x * depth + right.x * lateral,
+                    reserveAnchor.y, reserveAnchor.z - forward.z * depth + right.z * lateral));
             }
             return slots;
         }
 
-        private static int vajraRoleOrder(Mob mob) {
+        private static boolean assignRecruit(ServerLevel level, ServerPlayer player, Mob recruit, Slot slot,
+                                             int formationIndex, List<UUID> assignedIds) {
+            BlockPos surface = findSurface(level, slot.x(), slot.z());
+            if (surface == null) return false;
+            Vec3 target = new Vec3(surface.getX() + 0.5, surface.getY(), surface.getZ() + 0.5);
+            try {
+                invokeBoolean(recruit, "setShouldRest", false);
+                invokeRequired(recruit, "setHoldPos", new Class<?>[]{Vec3.class}, target);
+                invokeRequired(recruit, "setFollowState", new Class<?>[]{int.class}, 3);
+                setPublicFieldIfPresent(recruit, "formationPos", formationIndex);
+                setPublicFieldIfPresent(recruit, "isInFormation", true);
+                setPublicFieldIfPresent(recruit, "holdFormation", true);
+                setPublicFieldIfPresent(recruit, "ownerRot", player.getYRot());
+                recruit.getNavigation().stop();
+                assignedIds.add(recruit.getUUID());
+                level.sendParticles(ParticleTypes.HAPPY_VILLAGER, target.x, target.y + 0.7, target.z,
+                    1, 0.05, 0.05, 0.05, 0.0);
+                return true;
+            } catch (ReflectiveOperationException ex) {
+                LOGGER.warn("Could not apply Recruits-native formation to {}: {}", recruit.getType(), ex.toString());
+                return false;
+            }
+        }
+
+        private static VajraRole classifyVajraRole(Mob mob) {
             String id = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).getPath().toLowerCase(java.util.Locale.ROOT);
-            if (id.contains("horseman") || id.contains("cavalry") || id.contains("nomad")) return 0;
-            if (id.contains("crossbow") || id.contains("bowman") || id.contains("archer")) return 1;
-            if (id.contains("shieldman") || id.contains("shield")) return 2;
-            return 3;
+            String equipment = (mob.getMainHandItem().getItem().toString() + " " + mob.getOffhandItem().getItem().toString()).toLowerCase(java.util.Locale.ROOT);
+            if (id.contains("nomad")) return VajraRole.NOMAD;
+            if (id.contains("horseman") || id.contains("cavalry") || id.contains("mounted")) return VajraRole.HORSEMAN;
+            if (id.contains("crossbow") || equipment.contains("crossbow")) return VajraRole.CROSSBOWMAN;
+            if (id.contains("bowman") || id.contains("archer") || equipment.contains("bow")) return VajraRole.BOWMAN;
+            if (id.contains("shieldman") || id.contains("shield") || mob.getOffhandItem().getItem() instanceof net.minecraft.world.item.ShieldItem) return VajraRole.SHIELDMAN;
+            return VajraRole.RECRUIT;
         }
 
         private static Boolean canPlayerCommand(Mob mob, ServerPlayer player) {

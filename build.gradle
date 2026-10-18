@@ -6,7 +6,7 @@ plugins {
 }
 
 group = 'dev.vyuha'
-version = '0.6.0'
+version = '0.7.0'
 archivesBaseName = 'vyuha-warfare'
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
