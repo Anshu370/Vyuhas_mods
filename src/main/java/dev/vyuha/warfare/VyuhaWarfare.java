@@ -36,7 +36,7 @@ import java.util.UUID;
 public class VyuhaWarfare {
     public static final String MOD_ID = "vyuha_warfare";
     private static final int VAJRA_NOMAD_SLOTS = 24;
-    private static final int VAJRA_HORSEMAN_SLOTS = 40;
+    private static final int VAJRA_HORSEMAN_SLOTS = 44;
     private static final int VAJRA_SHIELDMAN_SLOTS = 80;
     private static final int VAJRA_RECRUIT_SLOTS = 64;
     private static final int VAJRA_BOWMAN_SLOTS = 40;
@@ -49,7 +49,7 @@ public class VyuhaWarfare {
     private static final Map<UUID, FormationState> ACTIVE_FORMATIONS = new HashMap<>();
 
     public VyuhaWarfare() {
-        LOGGER.info("Mahabharata Vyūha Warfare 1.0.0 edge-balanced Vajra blueprint loaded.");
+        LOGGER.info("Mahabharata Vyūha Warfare 1.1.0 corner-guarded Vajra blueprint loaded.");
     }
 
     private record Slot(UUID recruitId, double x, double y, double z) {}
@@ -172,7 +172,7 @@ public class VyuhaWarfare {
                 if (fullVajra) {
                     String missing = describeMissingRoster(groups);
                     if (!missing.isEmpty()) {
-                        source.sendFailure(Component.literal("Vajravyūha full deployment needs the complete 280-slot roster. Missing: " + missing
+                        source.sendFailure(Component.literal("Vajravyūha full deployment needs the complete 300-slot roster. Missing: " + missing
                             + ". Use /vyuha form vajra partial " + radius + " for a partial deployment."));
                         return 0;
                     }
@@ -227,7 +227,7 @@ public class VyuhaWarfare {
             source.sendSuccess(() -> Component.literal("Recruits-native " + formationName + ": assigned " + count
                 + " of " + recruits.size() + " commandable recruits."
                 + (formation.equals("vajra") ? " Footprint: 64×64 blocks; template capacity: " + VAJRA_TOTAL_SLOTS
-                    + " (Nomad 24, Horseman 40, Shieldman 80, Recruit 64, Bowman 40, Crossbowman 32). Mode: "
+                    + " (Nomad 24 in two inner rings, Horseman 44 including four corner guards, Shieldman 80, Recruit 64, Bowman 40, Crossbowman 32). Mode: "
                     + (fullVajra ? "FULL" : "PARTIAL") + ". Unfilled category slots remain empty; " + reserves
                     + " surplus recruits placed in the rear square reserve." : "")
                 + (ignored > 0 ? " Ignored " + ignored + " unowned/non-listening Recruits." : "")
@@ -283,18 +283,27 @@ public class VyuhaWarfare {
             // Outer-to-inner infantry rings remain separate; cavalry occupy a wider pair of wings.
             addSelectedDiamondRing(result.get(VajraRole.SHIELDMAN), anchor, forward, right, 20,
                 VAJRA_SHIELDMAN_SLOTS, false);
-            addSelectedDiamondRing(result.get(VajraRole.HORSEMAN), anchor, forward, right, 22,
-                VAJRA_HORSEMAN_SLOTS, true);
+            addCornerGuardedCavalry(result.get(VajraRole.HORSEMAN), anchor, forward, right, 22);
             addSelectedDiamondRing(result.get(VajraRole.RECRUIT), anchor, forward, right, 16,
                 VAJRA_RECRUIT_SLOTS, false);
             addSelectedDiamondRing(result.get(VajraRole.BOWMAN), anchor, forward, right, 10,
                 VAJRA_BOWMAN_SLOTS, false);
             addSelectedDiamondRing(result.get(VajraRole.CROSSBOWMAN), anchor, forward, right, 8,
                 VAJRA_CROSSBOWMAN_SLOTS, false);
-            addSelectedDiamondRing(result.get(VajraRole.NOMAD), anchor, forward, right, 6,
-                VAJRA_NOMAD_SLOTS, false);
+            // Split the 24 Nomads over two distinct inner rings (12 each) to reduce center crowding.
+            addSelectedDiamondRing(result.get(VajraRole.NOMAD), anchor, forward, right, 6, 12, false);
+            addSelectedDiamondRing(result.get(VajraRole.NOMAD), anchor, forward, right, 3, 12, false);
 
             return result;
+        }
+
+        private static void addCornerGuardedCavalry(List<Slot> out, Vec3 anchor, Vec3 forward, Vec3 right, int radius) {
+            // Keep the 40 slope positions (10 per edge), then add one mounted guard at each vertex.
+            addSelectedDiamondRing(out, anchor, forward, right, radius, 40, true);
+            addGridPoint(out, anchor, forward, right, -radius, 0); // front point
+            addGridPoint(out, anchor, forward, right, 0, radius);  // right point
+            addGridPoint(out, anchor, forward, right, radius, 0);  // rear point
+            addGridPoint(out, anchor, forward, right, 0, -radius); // left point
         }
 
         private static void addSelectedDiamondRing(List<Slot> out, Vec3 anchor, Vec3 forward, Vec3 right,
