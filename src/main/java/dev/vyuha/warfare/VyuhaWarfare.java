@@ -196,7 +196,7 @@ public class VyuhaWarfare {
                 + " of " + recruits.size() + " commandable recruits."
                 + (formation.equals("vajra") ? " Roles: Nomads=heavy-unit points, Horsemen=cavalry wings, Shieldmen=outer infantry, Recruits=next infantry layer, Bowmen/Crossbowmen=inner ranged ranks. Unfilled role slots remain empty; " + reserves + " surplus recruits placed in the rear square reserve." : "")
                 + (ignored > 0 ? " Ignored " + ignored + " unowned/non-listening Recruits." : "")
-                + (skipped > 0 ? " Skipped " + skipped + " slots without safe ground or usable native controls." : ""), false);
+                + (skipped > 0 ? " Skipped " + skipped + " slots without safe ground or usable native controls." : "")), false);
             return assigned;
         }
 
