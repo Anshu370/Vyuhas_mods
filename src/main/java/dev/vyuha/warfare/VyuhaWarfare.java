@@ -3,6 +3,7 @@ package dev.vyuha.warfare;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.logging.LogUtils;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -13,6 +14,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -38,7 +40,7 @@ public class VyuhaWarfare {
     private static final Map<UUID, FormationState> ACTIVE_FORMATIONS = new HashMap<>();
 
     public VyuhaWarfare() {
-        LOGGER.info("Mahabharata Vyūha Warfare 0.5.0 Recruits-native formation integration loaded.");
+        LOGGER.info("Mahabharata Vyūha Warfare 0.6.0 Vajravyuha formation integration loaded.");
     }
 
     private record Slot(UUID recruitId, double x, double y, double z) {}
@@ -80,95 +82,12 @@ public class VyuhaWarfare {
                     .then(Commands.literal("form")
                         .then(Commands.literal("line")
                             .then(Commands.argument("radius", IntegerArgumentType.integer(4, 32))
-                                .executes(context -> {
-                                    ServerPlayer player = context.getSource().getPlayerOrException();
-                                    ServerLevel level = player.serverLevel();
-                                    int radius = IntegerArgumentType.getInteger(context, "radius");
-                                    if (!ModList.get().isLoaded("recruits")) {
-                                        context.getSource().sendFailure(Component.literal(
-                                            "Villager Recruits is not loaded. Install Recruits 1.20.1 Forge to use native formation integration."));
-                                        return 0;
-                                    }
-                                    AABB searchBox = player.getBoundingBox().inflate(radius);
-                                    List<Mob> nearby = level.getEntitiesOfClass(Mob.class, searchBox,
-                                        mob -> mob.isAlive() && isRecruitsMob(mob));
-                                    nearby.sort(Comparator.comparingDouble(mob -> mob.distanceToSqr(player)));
-
-                                    List<Mob> recruits = new ArrayList<>();
-                                    int ineligible = 0;
-                                    for (Mob mob : nearby) {
-                                        Boolean controlled = canPlayerCommand(mob, player);
-                                        if (Boolean.TRUE.equals(controlled)) recruits.add(mob);
-                                        else ineligible++;
-                                    }
-                                    if (recruits.isEmpty()) {
-                                        context.getSource().sendFailure(Component.literal(
-                                            "No commandable Recruits found within " + radius + " blocks. Recruits must be alive, owned by you, and listening for commands."));
-                                        return 0;
-                                    }
-
-                                    Vec3 forward = horizontalForward(player);
-                                    Vec3 right = new Vec3(forward.z, 0, -forward.x);
-                                    Vec3 anchor = player.position().add(forward.scale(5.0));
-                                    List<Slot> slots = new ArrayList<>();
-                                    int unsuitable = 0;
-                                    for (int i = 0; i < recruits.size(); i++) {
-                                        Mob recruit = recruits.get(i);
-                                        double offset = (i - (recruits.size() - 1) / 2.0) * SLOT_SPACING;
-                                        double rawX = anchor.x + right.x * offset;
-                                        double rawZ = anchor.z + right.z * offset;
-                                        BlockPos surface = findSurface(level, rawX, rawZ);
-                                        if (surface == null) { unsuitable++; continue; }
-                                        slots.add(new Slot(recruit.getUUID(), surface.getX() + 0.5,
-                                            surface.getY(), surface.getZ() + 0.5));
-                                    }
-                                    if (slots.isEmpty()) {
-                                        context.getSource().sendFailure(Component.literal(
-                                            "No safe ground slots found. Try a flatter, more open area."));
-                                        return 0;
-                                    }
-
-                                    int assigned = 0;
-                                    List<UUID> assignedIds = new ArrayList<>();
-                                    for (Slot slot : slots) {
-                                        Entity entity = level.getEntity(slot.recruitId());
-                                        if (!(entity instanceof Mob recruit) || !recruit.isAlive()) continue;
-                                        Vec3 target = new Vec3(slot.x(), slot.y(), slot.z());
-                                        try {
-                                            // Use Recruits' own hold-position goal/state instead of competing with it
-                                            // through vanilla navigation. All integration points are reflective so
-                                            // this addon does not bundle or compile against Recruits implementation code.
-                                            if (invokeBoolean(recruit, "setShouldRest", false) == false) {
-                                                // Missing optional method is tolerated; setFollowState below is required.
-                                            }
-                                            invokeRequired(recruit, "setHoldPos", new Class<?>[]{Vec3.class}, target);
-                                            invokeRequired(recruit, "setFollowState", new Class<?>[]{int.class}, 3);
-                                            setPublicFieldIfPresent(recruit, "formationPos", assigned);
-                                            setPublicFieldIfPresent(recruit, "isInFormation", true);
-                                            setPublicFieldIfPresent(recruit, "holdFormation", true);
-                                            setPublicFieldIfPresent(recruit, "ownerRot", player.getYRot());
-                                            recruit.getNavigation().stop();
-                                            assignedIds.add(recruit.getUUID());
-                                            level.sendParticles(ParticleTypes.HAPPY_VILLAGER,
-                                                target.x, target.y + 0.7, target.z, 1, 0.05, 0.05, 0.05, 0.0);
-                                            assigned++;
-                                        } catch (ReflectiveOperationException ex) {
-                                            LOGGER.warn("Could not apply Recruits-native formation to {}: {}",
-                                                recruit.getType().toString(), ex.toString());
-                                        }
-                                    }
-                                    ACTIVE_FORMATIONS.put(player.getUUID(), new FormationState(
-                                        level.dimension().location().toString(), assignedIds));
-                                    final int ineligibleCount = ineligible;
-                                    final int unsuitableCount = unsuitable;
-                                    final int resultCount = assigned;
-                                    context.getSource().sendSuccess(() -> Component.literal(
-                                        "Recruits-native battle line assigned to " + resultCount + "/" + recruits.size() +
-                                        " of your Recruits. Their built-in hold-position goal will manage movement and settling." +
-                                        (ineligibleCount > 0 ? " Ignored " + ineligibleCount + " unowned/non-listening Recruits." : "") +
-                                        (unsuitableCount > 0 ? " Skipped " + unsuitableCount + " slots without safe ground." : "")), false);
-                                    return assigned;
-                                }))))
+                                .executes(context -> applyFormation(context.getSource().getPlayerOrException(),
+                                    IntegerArgumentType.getInteger(context, "radius"), "line", context.getSource()))))
+                        .then(Commands.literal("vajra")
+                            .then(Commands.argument("radius", IntegerArgumentType.integer(4, 32))
+                                .executes(context -> applyFormation(context.getSource().getPlayerOrException(),
+                                    IntegerArgumentType.getInteger(context, "radius"), "vajra", context.getSource())))))
                     .then(Commands.literal("release").executes(context -> {
                         ServerPlayer player = context.getSource().getPlayerOrException();
                         FormationState state = ACTIVE_FORMATIONS.remove(player.getUUID());
@@ -197,6 +116,127 @@ public class VyuhaWarfare {
                         return released;
                     }))
             );
+        }
+
+        private static int applyFormation(ServerPlayer player, int radius, String formation, CommandSourceStack source)
+            throws CommandSyntaxException {
+            ServerLevel level = player.serverLevel();
+            if (!ModList.get().isLoaded("recruits")) {
+                source.sendFailure(Component.literal("Villager Recruits is not loaded. Install Recruits 1.20.1 Forge to use native formation integration."));
+                return 0;
+            }
+            AABB searchBox = player.getBoundingBox().inflate(radius);
+            List<Mob> nearby = level.getEntitiesOfClass(Mob.class, searchBox,
+                mob -> mob.isAlive() && isRecruitsMob(mob));
+            nearby.sort(Comparator.comparingDouble(mob -> mob.distanceToSqr(player)));
+            List<Mob> recruits = new ArrayList<>();
+            int ineligible = 0;
+            for (Mob mob : nearby) {
+                if (Boolean.TRUE.equals(canPlayerCommand(mob, player))) recruits.add(mob);
+                else ineligible++;
+            }
+            if (recruits.isEmpty()) {
+                source.sendFailure(Component.literal("No commandable Recruits found within " + radius + " blocks. Recruits must be alive, owned by you, and listening for commands."));
+                return 0;
+            }
+
+            Vec3 forward = horizontalForward(player);
+            Vec3 right = new Vec3(forward.z, 0, -forward.x);
+            Vec3 anchor = player.position().add(forward.scale(5.0));
+            List<Slot> slots = formation.equals("vajra")
+                ? makeVajraSlots(recruits.size(), anchor, forward, right)
+                : makeLineSlots(recruits.size(), anchor, right);
+
+            if (formation.equals("vajra")) {
+                // Arrange role groups for the Vajra's visual layers. Registry IDs vary by Recruits version,
+                // so classification uses conservative name fragments and falls back to ordinary infantry.
+                recruits.sort(Comparator.comparingInt(ForgeEvents::vajraRoleOrder)
+                    .thenComparingDouble(mob -> mob.distanceToSqr(player)));
+            }
+
+            int assigned = 0, unsuitable = 0;
+            List<UUID> assignedIds = new ArrayList<>();
+            int n = Math.min(recruits.size(), slots.size());
+            for (int i = 0; i < n; i++) {
+                Mob recruit = recruits.get(i);
+                Slot slot = slots.get(i);
+                BlockPos surface = findSurface(level, slot.x(), slot.z());
+                if (surface == null) { unsuitable++; continue; }
+                Vec3 target = new Vec3(surface.getX() + 0.5, surface.getY(), surface.getZ() + 0.5);
+                try {
+                    invokeBoolean(recruit, "setShouldRest", false);
+                    invokeRequired(recruit, "setHoldPos", new Class<?>[]{Vec3.class}, target);
+                    invokeRequired(recruit, "setFollowState", new Class<?>[]{int.class}, 3);
+                    setPublicFieldIfPresent(recruit, "formationPos", assigned);
+                    setPublicFieldIfPresent(recruit, "isInFormation", true);
+                    setPublicFieldIfPresent(recruit, "holdFormation", true);
+                    setPublicFieldIfPresent(recruit, "ownerRot", player.getYRot());
+                    recruit.getNavigation().stop();
+                    assignedIds.add(recruit.getUUID());
+                    level.sendParticles(ParticleTypes.HAPPY_VILLAGER, target.x, target.y + 0.7, target.z,
+                        1, 0.05, 0.05, 0.05, 0.0);
+                    assigned++;
+                } catch (ReflectiveOperationException ex) {
+                    LOGGER.warn("Could not apply Recruits-native {} formation to {}: {}", formation,
+                        recruit.getType().toString(), ex.toString());
+                }
+            }
+            ACTIVE_FORMATIONS.put(player.getUUID(), new FormationState(level.dimension().location().toString(), assignedIds));
+            final int count = assigned, skipped = unsuitable, ignored = ineligible;
+            String formationName = formation.equals("vajra") ? "Vajravyūha diamond" : "battle line";
+            source.sendSuccess(() -> Component.literal("Recruits-native " + formationName + " assigned to " + count + "/" + recruits.size()
+                + " of your Recruits. Their built-in hold-position goal manages movement and settling."
+                + (formation.equals("vajra") ? " Ranged units are ordered toward the inner/rear ranks; mobile units toward outer ranks where their registry names are recognizable." : "")
+                + (ignored > 0 ? " Ignored " + ignored + " unowned/non-listening Recruits." : "")
+                + (skipped > 0 ? " Skipped " + skipped + " slots without safe ground." : "")), false);
+            return assigned;
+        }
+
+        private static List<Slot> makeLineSlots(int count, Vec3 anchor, Vec3 right) {
+            List<Slot> slots = new ArrayList<>();
+            for (int i = 0; i < count; i++) {
+                double offset = (i - (count - 1) / 2.0) * SLOT_SPACING;
+                slots.add(new Slot(new UUID(0L, 0L), anchor.x + right.x * offset, anchor.y, anchor.z + right.z * offset));
+            }
+            return slots;
+        }
+
+        private static List<Slot> makeVajraSlots(int count, Vec3 anchor, Vec3 forward, Vec3 right) {
+            // Diamond lattice: narrow pointed front and rear, widest ranks through the middle.
+            List<Slot> slots = new ArrayList<>();
+            int halfDepth = Math.max(2, (int)Math.ceil(Math.sqrt(count)));
+            List<double[]> points = new ArrayList<>();
+            for (int row = -halfDepth; row <= halfDepth; row++) {
+                int width = halfDepth - Math.abs(row);
+                for (int col = -width; col <= width; col++) {
+                    points.add(new double[]{row, col});
+                }
+            }
+            // Front-to-rear rank order; within each rank, alternate left/right to keep the shape balanced.
+            points.sort((a, b) -> {
+                int rowCompare = Double.compare(a[0], b[0]);
+                if (rowCompare != 0) return rowCompare;
+                int absCompare = Double.compare(Math.abs(a[1]), Math.abs(b[1]));
+                if (absCompare != 0) return absCompare;
+                return Double.compare(a[1], b[1]);
+            });
+            for (int i = 0; i < Math.min(count, points.size()); i++) {
+                double row = points.get(i)[0], col = points.get(i)[1];
+                double depth = row * SLOT_SPACING * 1.25;
+                double lateral = col * SLOT_SPACING;
+                double x = anchor.x - forward.x * depth + right.x * lateral;
+                double z = anchor.z - forward.z * depth + right.z * lateral;
+                slots.add(new Slot(new UUID(0L, 0L), x, anchor.y, z));
+            }
+            return slots;
+        }
+
+        private static int vajraRoleOrder(Mob mob) {
+            String id = BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).getPath().toLowerCase(java.util.Locale.ROOT);
+            if (id.contains("horseman") || id.contains("cavalry") || id.contains("nomad")) return 0;
+            if (id.contains("crossbow") || id.contains("bowman") || id.contains("archer")) return 1;
+            if (id.contains("shieldman") || id.contains("shield")) return 2;
+            return 3;
         }
 
         private static Boolean canPlayerCommand(Mob mob, ServerPlayer player) {
