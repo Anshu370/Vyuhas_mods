@@ -43,13 +43,13 @@ public class VyuhaWarfare {
     private static final int VAJRA_CROSSBOWMAN_SLOTS = 32;
     private static final int VAJRA_TOTAL_SLOTS = VAJRA_NOMAD_SLOTS + VAJRA_HORSEMAN_SLOTS
         + VAJRA_SHIELDMAN_SLOTS + VAJRA_RECRUIT_SLOTS + VAJRA_BOWMAN_SLOTS + VAJRA_CROSSBOWMAN_SLOTS;
-    private static final double VAJRA_SLOT_SPACING = 1.5;
+    private static final double VAJRA_SLOT_SPACING = 1.4;
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final double SLOT_SPACING = 1.75;
     private static final Map<UUID, FormationState> ACTIVE_FORMATIONS = new HashMap<>();
 
     public VyuhaWarfare() {
-        LOGGER.info("Mahabharata Vyūha Warfare 0.9.0 Vajra blueprint loaded.");
+        LOGGER.info("Mahabharata Vyūha Warfare 1.0.0 edge-balanced Vajra blueprint loaded.");
     }
 
     private record Slot(UUID recruitId, double x, double y, double z) {}
@@ -279,7 +279,7 @@ public class VyuhaWarfare {
             for (VajraRole role : VajraRole.values()) result.put(role, new ArrayList<>());
 
             // Fixed Vajra 2.0 blueprint: one dedicated diamond perimeter per role.
-            // The entire template fits inside the 64x64 footprint (outer radius 22 * 1.5 = 33 blocks).
+            // The entire template fits inside the 64x64 footprint (outer radius 22 * 1.4 = 30.8 blocks).
             // Outer-to-inner infantry rings remain separate; cavalry occupy a wider pair of wings.
             addSelectedDiamondRing(result.get(VajraRole.SHIELDMAN), anchor, forward, right, 20,
                 VAJRA_SHIELDMAN_SLOTS, false);
@@ -299,26 +299,41 @@ public class VyuhaWarfare {
 
         private static void addSelectedDiamondRing(List<Slot> out, Vec3 anchor, Vec3 forward, Vec3 right,
                                                    int radius, int capacity, boolean wingsOnly) {
-            List<int[]> candidates = new ArrayList<>();
-            // Walk all four diamond edges without duplicating the four corner points.
-            for (int col = -radius; col <= radius; col++) {
-                int rowAbs = radius - Math.abs(col);
-                candidates.add(new int[]{-rowAbs, col});
-            }
-            for (int row = -radius + 1; row < radius; row++) {
-                int colAbs = radius - Math.abs(row);
-                candidates.add(new int[]{row, colAbs});
-                candidates.add(new int[]{row, -colAbs});
-            }
             if (wingsOnly) {
-                // Keep the left/right wings; omit the sharp front and rear points.
-                candidates.removeIf(point -> Math.abs(point[0]) == radius);
+                // Horsemen are split evenly over the four diamond slopes: 10 per slope,
+                // with endpoints excluded so the sharp front/rear points remain clear.
+                // This is intentionally independent of the available troop count.
+                int perSlope = capacity / 4;
+                double[][] vertices = new double[][] {
+                    {-radius, 0}, {0, radius}, {radius, 0}, {0, -radius}, {-radius, 0}
+                };
+                for (int edge = 0; edge < 4; edge++) {
+                    double rowA = vertices[edge][0];
+                    double colA = vertices[edge][1];
+                    double rowB = vertices[edge + 1][0];
+                    double colB = vertices[edge + 1][1];
+                    for (int i = 0; i < perSlope; i++) {
+                        double t = (i + 1.0) / (perSlope + 1.0);
+                        double row = rowA + (rowB - rowA) * t;
+                        double col = colA + (colB - colA) * t;
+                        addGridPoint(out, anchor, forward, right, row, col);
+                    }
+                }
+                return;
             }
-            // Stable angular order makes evenly sampled points mirror across both axes.
-            candidates.sort(Comparator.comparingDouble(point -> Math.atan2(point[1], point[0])));
+
+            // Exact diamond perimeter: four edges, each contributes 'radius' points.
+            // Every corner is included once, with no duplicate or cross-like coordinates.
+            List<int[]> candidates = new ArrayList<>(radius * 4);
+            for (int step = 0; step < radius; step++) {
+                candidates.add(new int[]{-radius + step, step});       // front to right
+                candidates.add(new int[]{step, radius - step});        // right to rear
+                candidates.add(new int[]{radius - step, -step});       // rear to left
+                candidates.add(new int[]{-step, -radius + step});      // left to front
+            }
             int take = Math.min(capacity, candidates.size());
             for (int i = 0; i < take; i++) {
-                int index = (int) Math.round(i * candidates.size() / (double) take) % candidates.size();
+                int index = (int) Math.floor(i * candidates.size() / (double) take);
                 int[] point = candidates.get(index);
                 addGridPoint(out, anchor, forward, right, point[0], point[1]);
             }
